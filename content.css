@@ -97,8 +97,7 @@ html.crrcf-truncate-titles [data-t="series-page-link"] { display: -webkit-box !i
 }
 
 /* Calendar size levels use symmetric side gutters, from original width to full viewport width. */
-html.crrcf-wide-calendar .page-wrapper--5HUY2.erc-release-calendar,
-html.crrcf-wide-calendar .erc-release-calendar.page-wrapper--5HUY2 {
+html.crrcf-wide-calendar .erc-release-calendar {
   width: calc(100vw - var(--crrcf-calendar-inset, 0vw) - var(--crrcf-calendar-inset, 0vw)) !important;
   max-width: none !important;
   box-sizing: border-box !important;
@@ -106,7 +105,9 @@ html.crrcf-wide-calendar .erc-release-calendar.page-wrapper--5HUY2 {
   left: 50% !important;
   transform: translateX(-50%) !important;
 }
-html.crrcf-wide-calendar .erc-release-calendar .content-wrapper--MF5LS,
+/* Crunchyroll's CSS-module class names end in a build hash (content-wrapper--MF5LS), so match the stable prefix. */
+html.crrcf-wide-calendar .erc-release-calendar > [class^="content-wrapper--"],
+html.crrcf-wide-calendar .erc-release-calendar > [class*=" content-wrapper--"],
 html.crrcf-wide-calendar .erc-release-calendar [data-t="release-calendar-content"],
 html.crrcf-wide-calendar .erc-release-calendar [data-t="week-grid"],
 html.crrcf-wide-calendar .erc-release-calendar .erc-week-grid {

@@ -23,14 +23,20 @@
     alignCards: true,
     includeUnknownLanguages: false,
     hidePremiereBadges: true,
-    keepOriginalAudio: true,
+    // Off by default: it is the only calendar feature that needs AniList lookups.
+    keepOriginalAudio: false,
     calendarWidthLevel: 2,
     truncateTitles: true
   };
-  let settings = { ...DEFAULTS };
+  // Bump when a stored setting changes meaning and needs a one-time migration.
+  const SCHEMA_VERSION = 1;
+  let settings = { ...DEFAULTS, schemaVersion: SCHEMA_VERSION };
   let applying = false;
   let queued = false;
-  let observer;
+  let calendarObserver = null;
+  let titleObserver = null;
+  // Which feature set is currently running: 'calendar', 'series', 'watch' or 'other'.
+  let activeKind = 'other';
   // Track the exact text-node values written by this extension so its own
   // characterData records never schedule another title pass.
   const ownTitleTextMutations = new WeakMap();
@@ -73,8 +79,55 @@
     return aliases[s] || (LANGUAGES.some(x => x[0] === s) ? s : null);
   }
 
+  // Language-independent: the card's audio button carries the full list in its
+  // aria-label ("Audio languages: EN, ES, KO, JA"), whatever the UI language is,
+  // so read everything after the first colon instead of matching the label text.
+  const CODE_TOKEN = /^[A-Z]{2,3}(?:-[A-Z0-9]{2,4})?$/;
+  function languageInfoFromTokens(tokens) {
+    const codes = new Set();
+    let hasUnknown = false;
+    for (const token of tokens) {
+      const code = normalizeCode(token);
+      if (code) codes.add(code); else hasUnknown = true;
+    }
+    return { codes: [...codes], hasMetadata: true, hasUnknown };
+  }
+
+  function parseAudioLabel(label) {
+    const text = String(label || '');
+    const colon = text.search(/[:：]/);
+    if (colon < 0) return null;
+    const tokens = text.slice(colon + 1).split(/[,،、，;/|]+/)
+      .map(raw => raw.trim().toUpperCase()).filter(token => CODE_TOKEN.test(token));
+    return languageInfoFromTokens(tokens);
+  }
+
+  // Cards with a single audio language have no audio button; the language only
+  // appears in the card's screen-reader sentence, for example
+  // "Watch Show, Drop time: 10:00, Season 1, episode 6, Audio languages: JA, Release 3 of 8".
+  // Take the last "<label>: CODE" segment plus the code-shaped segments after it,
+  // so nothing depends on the (translated) wording of the label.
+  function parseScreenReaderLanguages(text) {
+    const parts = String(text || '').split(/\s*[,،、，]\s*/);
+    for (let i = parts.length - 1; i >= 0; i--) {
+      const first = parts[i].match(/[:：]\s*(\S+)$/)?.[1];
+      if (!first || !CODE_TOKEN.test(first)) continue;
+      const tokens = [first];
+      for (let j = i + 1; j < parts.length && CODE_TOKEN.test(parts[j].trim()); j++) tokens.push(parts[j].trim());
+      return languageInfoFromTokens(tokens);
+    }
+    return null;
+  }
+
   function getLanguageInfo(card) {
-    // The redesigned calendar can expose audio information as plain card text
+    const labelled = parseAudioLabel(card.querySelector("[data-t='audio-languages']")?.getAttribute('aria-label'));
+    if (labelled) return labelled;
+    for (const node of card.querySelectorAll("[data-t='sr-only']")) {
+      const spoken = parseScreenReaderLanguages(node.textContent);
+      if (spoken) return spoken;
+    }
+    // Fallbacks for markup without that button: the redesigned calendar can
+    // expose audio information as plain card text
     // (for example "Idiomas de áudio: FR") without a dedicated data-t node.
     // Prefer this explicit, release-specific label over generic card metadata.
     const text = card.textContent || '';
@@ -123,7 +176,7 @@
   const getCards = () => [...document.querySelectorAll("[data-t='release-calendar-card']")];
   function cardCell(card) { return card.closest("[data-t='release-cell']") || card; }
 
-  let romajiTitleStatus = 'AniList metadata has not been checked.';
+  let romajiTitleStatus = 'Looks up each show on AniList (sends its title to graphql.anilist.co).';
   const metadataByTitle = new Map();
   const metadataPending = new Map();
   let metadataSaveQueued = false;
@@ -159,12 +212,19 @@
 
   function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
 
-  // Serialize AniList requests. On HTTP 429, pause the queue for one minute
+  // AniList allows 90 requests/minute, but documents a temporary degraded limit of
+  // 30/minute; 2.1 s between requests stays under both.
+  const ANILIST_MIN_INTERVAL_MS = 2100;
+  const ANILIST_DEFAULT_PAUSE_MS = 60000;
+  const ANILIST_MAX_PAUSE_MS = 300000;
+
+  // Serialize AniList requests. On HTTP 429, pause the whole queue (for the
+  // Retry-After time when the browser exposes that header, otherwise one minute)
   // and retry this exact request before allowing the next title to proceed.
   function anilistRequest(query, variables) {
     const run = async () => {
       while (true) {
-        const wait = Math.max(0, 900 - (Date.now() - anilistLastRequestAt));
+        const wait = Math.max(0, ANILIST_MIN_INTERVAL_MS - (Date.now() - anilistLastRequestAt));
         if (wait) await sleep(wait);
         anilistLastRequestAt = Date.now();
         const response = await fetch('https://graphql.anilist.co', {
@@ -180,8 +240,13 @@
           } catch (_) {}
         }
         if (!rateLimited) return response;
-        addRuntimeLog('AniList returned HTTP 429. Pausing all lookups for 60 seconds, then retrying this same title.');
-        await sleep(60000);
+        // Retry-After is only readable if AniList exposes it through CORS.
+        const retryAfterSeconds = Number(response.headers.get('Retry-After'));
+        const pauseMs = Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0
+          ? Math.min(ANILIST_MAX_PAUSE_MS, retryAfterSeconds * 1000 + 1000)
+          : ANILIST_DEFAULT_PAUSE_MS;
+        addRuntimeLog(`AniList rate limit reached (HTTP 429). Pausing all lookups for ${Math.round(pauseMs / 1000)} seconds, then retrying this same title.`);
+        await sleep(pauseMs);
       }
     };
     const task = anilistRequestQueue.then(run, run);
@@ -228,7 +293,9 @@
     if (metadataPending.has(key)) return metadataPending.get(key);
     const pending = (async () => {
       const query = `query ($search: String!, $type: MediaType) { Page(perPage: 50) { media(search: $search, type: $type) { id type countryOfOrigin synonyms title { english romaji native } } } }`;
-      for (const type of ['ANIME', 'MANGA']) {
+      // ANIME only: a second MANGA request for every unmatched title doubled the
+      // traffic for little benefit. Add 'MANGA' back here to restore it.
+      for (const type of ['ANIME']) {
         try {
           const response = await anilistRequest(query, { search: normalizeAniListSearch(crunchyrollTitle), type });
           if (!response?.ok) {
@@ -298,7 +365,16 @@
 
   let metadataScanPromise = null;
   let metadataScanRerunRequested = false;
+  // AniList is only contacted while a feature that needs it is switched on, so a
+  // default install sends nothing to third parties.
+  function anilistFeaturesEnabled() { return Boolean(settings.showRomajiTitles || settings.keepOriginalAudio); }
+
   async function scanAniListMetadata() {
+    if (!anilistFeaturesEnabled()) {
+      romajiTitleStatus = 'AniList lookups are off. Enable Romaji titles or Always show original-audio to use them.';
+      updateRomajiTitleStatus();
+      return;
+    }
     if (metadataScanPromise) { metadataScanRerunRequested = true; return metadataScanPromise; }
     metadataScanPromise = (async () => {
       activeAniListScans++;
@@ -355,6 +431,7 @@
     }
     updateRomajiTitleStatus();
     requestAnimationFrame(() => {
+      if (activeKind !== 'calendar') return;
       if (settings.alignCards) applyAlignment();
       if (settings.truncateTitles) document.documentElement.classList.add('crrcf-truncate-titles');
     });
@@ -373,7 +450,7 @@
   }
 
   function applyFilters() {
-    if (applying) return;
+    if (applying || activeKind !== 'calendar') return;
     applying = true;
     try {
       for (const card of getCards()) {
@@ -497,7 +574,7 @@
 
   function applyCalendarSize() {
     const root = document.documentElement;
-    const calendar = document.querySelector('.erc-release-calendar.page-wrapper--5HUY2, .page-wrapper--5HUY2.erc-release-calendar, .erc-release-calendar');
+    const calendar = document.querySelector('.erc-release-calendar');
     const parsedLevel = Number(settings.calendarWidthLevel);
     const level = Number.isFinite(parsedLevel) ? Math.max(0, Math.min(WIDTH_LEVELS.length - 1, parsedLevel)) : 0;
     root.classList.remove('crrcf-wide-calendar');
@@ -642,7 +719,10 @@
     const timeBlock = addSettingBlock(styleList, makeSwitch('crrcf-time24', '24-hour time', settings.time24h, value => { settings.time24h = value; setNativeTime(value); saveSettings(); }), null, '', 'crrcf-time-block');
     const timezoneNote = document.createElement('div'); timezoneNote.className = 'crrcf-timezone-note'; timeBlock.append(timezoneNote);
 
-    addSettingBlock(panel.querySelector('#crrcf-original-audio-slot'), makeSwitch('crrcf-original-audio', 'Force original audio', settings.keepOriginalAudio, value => { settings.keepOriginalAudio = value; saveSettings(); queueApply(); }));
+    addSettingBlock(panel.querySelector('#crrcf-original-audio-slot'), makeSwitch('crrcf-original-audio', 'Always show original-audio releases', settings.keepOriginalAudio, value => {
+      settings.keepOriginalAudio = value; saveSettings(); queueApply();
+      if (value) scanAniListMetadata().then(() => queueApply());
+    }), 'crrcf-original-audio-note', 'Looks up each show on AniList (sends its title to graphql.anilist.co).');
 
     const widthBlock = document.createElement('div');
     widthBlock.className = 'crrcf-width-control';
@@ -704,10 +784,23 @@
     if (summary) summary.textContent = `${settings.selectedLanguages.length + (settings.includeUnknownLanguages ? 1 : 0)}/${LANGUAGES.length + 1} selected`;
   }
 
+  // Remember where the site's timezone note lived so it can be put back when the
+  // panel goes away (React expects to find it in its original parent).
+  let timezoneNoteHome = null;
   function moveTimezoneNote() {
     const note = document.querySelector('.timezone-controls .timezone-note, .timezone-note');
     const destination = document.querySelector('#crrcf-panel .crrcf-timezone-note');
-    if (note && destination && note.parentElement !== destination) destination.append(note);
+    if (note && destination && note.parentElement !== destination) {
+      timezoneNoteHome = { note, parent: note.parentElement, next: note.nextSibling };
+      destination.append(note);
+    }
+  }
+  function restoreTimezoneNote() {
+    const home = timezoneNoteHome;
+    timezoneNoteHome = null;
+    if (!home?.parent?.isConnected) return;
+    const next = home.next && home.next.parentNode === home.parent ? home.next : null;
+    home.parent.insertBefore(home.note, next);
   }
 
   function positionPanel(panel, gear) {
@@ -765,7 +858,7 @@
       gear.classList.remove('crrcf-floating-gear');
       moveTimezoneNote();
     } else {
-      const header = document.querySelector('.content-wrapper--MF5LS .header, .content-wrapper--MF5LS header, [data-t="release-calendar-content"] header');
+      const header = document.querySelector('.erc-release-calendar .header, .erc-release-calendar header, [data-t="release-calendar-content"] header');
       progress.classList.add('crrcf-floating-progress');
       if (progress.parentElement !== (header || document.body)) (header || document.body).append(progress);
       if (gear.parentElement !== (header || document.body)) (header || document.body).append(gear);
@@ -786,22 +879,43 @@
   }
 
 
+  // Crunchyroll prefixes non-English URLs with a locale: /pt-br/series/…, /de/watch/…
+  const LOCALE_PREFIX = '(?:/[a-z]{2}(?:-[a-z0-9]{2,4})?)?';
+  const SERIES_PATH = new RegExp(`^${LOCALE_PREFIX}/series/[^/]+(?:/[^/]+)?/?$`, 'i');
+  const WATCH_PATH = new RegExp(`^${LOCALE_PREFIX}/watch/[^/]+(?:/[^/]+)?/?$`, 'i');
+  const CALENDAR_PATH = new RegExp(`^${LOCALE_PREFIX}/releasecalendar/?$`, 'i');
+
+  // 'series' | 'watch' | 'calendar' | 'other' (the script is injected on every
+  // crunchyroll.com page so it can follow in-site navigation, and stays idle on 'other').
   function currentPageKind() {
     const path = location.pathname;
     // Series URLs include both an ID and a human-readable slug.
-    if (/^\/series\/[^/]+(?:\/[^/]+)?\/?$/.test(path)) return 'series';
-    if (/^\/watch\/[^/]+(?:\/[^/]+)?\/?$/.test(path)) return 'watch';
-    return 'calendar';
+    if (SERIES_PATH.test(path)) return 'series';
+    if (WATCH_PATH.test(path)) return 'watch';
+    if (CALENDAR_PATH.test(path)) return 'calendar';
+    return 'other';
   }
+  const isTitlePage = kind => kind === 'series' || kind === 'watch';
 
   function getStructuredSeriesTitle() {
     const kind = currentPageKind();
-    if (kind === 'calendar') return '';
+    if (!isTitlePage(kind)) return '';
+    // JSON-LD and og:title prefix the series name with a localized "Watch"
+    // ("Watch Show Name"). The series page's own heading holds the bare title,
+    // so when the prefixed name ends with it, use the heading's text.
+    const cleanSeriesName = name => {
+      const raw = String(name || '').trim();
+      const heading = document.querySelector('main h1, [role="main"] h1, #content h1, h1');
+      const bare = (heading?.dataset?.crrcfOriginalPageTitle || heading?.textContent || '').trim();
+      const rawKey = titleKey(raw), bareKey = titleKey(bare);
+      if (kind === 'series' && bareKey && rawKey !== bareKey && rawKey.endsWith(` ${bareKey}`)) return bare;
+      return raw.replace(/^Watch\s+/i, '').trim();
+    };
     const readSeries = value => {
       if (!value || typeof value !== 'object') return '';
       const type = value['@type'];
       if ((type === 'TVSeries' || (Array.isArray(type) && type.includes('TVSeries'))) && value.name) {
-        return String(value.name).replace(/^Watch\s+/i, '').trim();
+        return cleanSeriesName(value.name);
       }
       if (value.partOfSeries?.name) return String(value.partOfSeries.name).trim();
       if (Array.isArray(value)) {
@@ -828,7 +942,7 @@
 
     if (kind === 'series') {
       const ogTitle = document.querySelector('meta[property="og:title"]')?.content || '';
-      if (ogTitle) return ogTitle.replace(/^Watch\s+/i, '').trim();
+      if (ogTitle) return cleanSeriesName(ogTitle);
     }
 
     // The watch page exposes the parent series URL even though its document
@@ -977,7 +1091,8 @@
       for (const item of collectSeriesRecommendations()) {
         const key = titleKey(item.title);
         let record = findMetadataForTitle(item.title);
-        if (!record && !metadataAttempted.has(key)) {
+        // Only look titles up when the Romaji feature is on (nothing leaves the browser otherwise).
+        if (!record && settings.showRomajiTitles && !metadataAttempted.has(key)) {
           metadataAttempted.add(key);
           record = await lookupAniListMetadata(item.title);
         }
@@ -996,7 +1111,8 @@
 
   function applySeriesWatchTitle() {
     const kind = currentPageKind();
-    if (kind === 'calendar') return;
+    if (!isTitlePage(kind)) return;
+    if (kind !== 'watch') document.getElementById('crrcf-watch-reading-toggle-wrapper')?.remove();
     const seriesTitle = getStructuredSeriesTitle();
     if (!seriesTitle) return;
     const record = findMetadataForTitle(seriesTitle);
@@ -1072,12 +1188,15 @@
       }
       toggle.setAttribute('aria-pressed', showRomaji ? 'true' : 'false');
       toggle.title = showRomaji
-        ? 'Exibir título original (não altera as configurações)'
-        : 'Exibir título em romaji (não altera as configurações)';
+        ? 'Show original title (does not change settings)'
+        : 'Show romaji title (does not change settings)';
     }
   }
 
-  function startPageObserver() {
+  // Title mode: swaps series/episode titles on /series and /watch pages.
+  let titleRun = () => {};
+  function startTitleMode() {
+    if (titleObserver) { titleRun(); return; }
     let scheduled = false;
     const pageTitleSelector = [
       'a[data-t="show-title-link"] h4', '.current-media-parent-ref h4',
@@ -1156,90 +1275,68 @@
       applySeriesWatchTitle();
       if (currentPageKind() === 'series') scanSeriesRecommendations();
     };
-    observer = new MutationObserver(mutations => {
+    titleRun = run;
+    titleObserver = new MutationObserver(mutations => {
       // Ignore unrelated page churn and our own button/panel changes. Only
       // re-run when a relevant title is inserted, replaced, or changes text.
       if (!mutations.some(mutationIsRelevant) || scheduled) return;
       scheduled = true;
       requestAnimationFrame(run);
     });
-    observer.observe(document.documentElement, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['content', 'property', 'type'] });
-    window.addEventListener('popstate', run);
-    window.addEventListener('hashchange', run);
-    // Crunchyroll is an SPA; detect route changes even when React reuses the page.
-    const originalPushState = history.pushState;
-    history.pushState = function (...args) {
-      const result = originalPushState.apply(this, args);
-      setTimeout(run, 0);
-      return result;
-    };
-    const originalReplaceState = history.replaceState;
-    history.replaceState = function (...args) {
-      const result = originalReplaceState.apply(this, args);
-      setTimeout(run, 0);
-      return result;
-    };
+    titleObserver.observe(document.documentElement, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['content', 'property', 'type'] });
     run();
   }
 
-  async function init() {
-    const saved = await loadSettings();
-    await loadMetadataCache();
-    if (saved && typeof saved === 'object') {
-      settings = { ...DEFAULTS, ...saved };
-      if (saved.keepOriginalAudio === undefined && typeof saved.preserveOriginals === 'boolean') settings.keepOriginalAudio = saved.preserveOriginals;
-      delete settings.preserveOriginals;
-      delete settings.preserveCrunchyroll; delete settings.preserveAniListCountry; delete settings.preserveWikidataLanguage;
-      delete settings.wideCalendar;
-      if (saved.showRomajiTitles === undefined && typeof saved.showJapaneseTitles === 'boolean') settings.showRomajiTitles = saved.showJapaneseTitles;
-      delete settings.showJapaneseTitles;
-      if (saved.includeUnknownLanguages === undefined && typeof saved.hideUnknownLanguages === 'boolean') {
-        settings.includeUnknownLanguages = !saved.hideUnknownLanguages;
-      }
-      delete settings.hideUnknownLanguages;
-      if (!Array.isArray(settings.selectedLanguages)) settings.selectedLanguages = [...DEFAULTS.selectedLanguages];
-      settings.selectedLanguages = settings.selectedLanguages.filter(code => LANGUAGES.some(x => x[0] === code));
-      settings.calendarWidthLevel = Math.max(0, Math.min(WIDTH_LEVELS.length - 1, Number(settings.calendarWidthLevel) || 0));
-      if (!saved.crrcfCalendarDefaultV0122Applied) {
-        if (Number(saved.calendarWidthLevel) === 0) settings.calendarWidthLevel = 2;
-        settings.crrcfCalendarDefaultV0122Applied = true;
-        saveSettings();
-      }
-      if (!saved.crrcfDefaultsV015Applied) {
-        settings.selectedLanguages = [];
-        settings.includeUnknownLanguages = false;
-        settings.hiddenCounters = true;
-        settings.alignCards = true;
-        settings.hidePremiereBadges = true;
-        settings.truncateTitles = true;
-        settings.crrcfDefaultsV015Applied = true;
-        saveSettings();
-      }
-    } else {
-      settings.crrcfDefaultsV015Applied = true;
-      saveSettings();
-    }
-    if (!settings.crrcfJapaneseDefaultV0123Applied) {
-      if (!Array.isArray(saved?.selectedLanguages) || saved.selectedLanguages.length === 0) settings.selectedLanguages = ['JA'];
-      settings.crrcfJapaneseDefaultV0123Applied = true;
-      saveSettings();
-    }
-    if (currentPageKind() !== 'calendar') {
-      startPageObserver();
-      applySeriesWatchTitle();
-      if (currentPageKind() === 'series') scanSeriesRecommendations();
-      return;
-    }
+  function stopTitleMode() {
+    titleObserver?.disconnect();
+    titleObserver = null;
+    titleRun = () => {};
+    document.getElementById('crrcf-watch-reading-toggle-wrapper')?.remove();
+  }
+
+  // Calendar mode: filters, layout and settings panel on the release calendar.
+  const onCalendarResize = () => {
+    applyCalendarSize();
+    positionPanel(document.getElementById('crrcf-panel'), document.getElementById('crrcf-gear'));
+  };
+
+  // Crunchyroll can update the week in place, without replacing the whole calendar.
+  // Re-apply after the navigation action and once more after React finishes rendering.
+  const onCalendarClick = event => {
+    if (!event.target.closest?.('[data-t="previous-week"], [data-t="next-week"]')) return;
+    metadataAttempted.clear();
+    setTimeout(() => {
+      queueApply();
+      scanAniListMetadata().then(() => { if (settings.showRomajiTitles) applyRomajiFromCache(); queueApply(); });
+      if (settings.showRomajiTitles) applyRomajiFromCache();
+    }, 350);
+    setTimeout(() => {
+      queueApply();
+      if (settings.showRomajiTitles) applyRomajiFromCache();
+    }, 900);
+  };
+
+  // After in-site navigation the site's own 24-hour switch may render a moment
+  // later than this script runs, so wait for it (up to ~10 s) before syncing it once.
+  function syncNativeTime(attempt = 0) {
+    if (activeKind !== 'calendar') return;
+    if (document.querySelector('input[name="release-calendar-time-format"]')) setNativeTime(settings.time24h);
+    else if (attempt < 20) setTimeout(() => syncNativeTime(attempt + 1), 500);
+  }
+
+  function startCalendarMode() {
+    if (calendarObserver) return;
     attachGear();
-    window.addEventListener('resize', () => { applyCalendarSize(); positionPanel(document.getElementById('crrcf-panel'), document.getElementById('crrcf-gear')); });
+    window.addEventListener('resize', onCalendarResize);
+    document.addEventListener('click', onCalendarClick, true);
     document.documentElement.classList.toggle('crrcf-align-cards', settings.alignCards);
     document.documentElement.classList.toggle('crrcf-truncate-titles', settings.truncateTitles);
     applyCalendarSize();
-    setNativeTime(settings.time24h);
+    syncNativeTime();
     queueApply();
     scanAniListMetadata().then(() => { if (settings.showRomajiTitles) applyRomajiFromCache(); queueApply(); });
     if (settings.showRomajiTitles) applyRomajiFromCache();
-    observer = new MutationObserver(mutations => {
+    calendarObserver = new MutationObserver(mutations => {
       if (document.querySelector('.erc-release-calendar')) applyCalendarSize();
       // Ignore our own settings panel, gear, and counter text to prevent observer loops.
       const relevant = mutations.some(mutation => {
@@ -1268,23 +1365,82 @@
         if (settings.showRomajiTitles) requestAnimationFrame(() => applyRomajiFromCache());
       }
     });
-    // Crunchyroll can update the week in place, without replacing the whole calendar.
-    // Re-apply after the navigation action and once more after React finishes rendering.
-    document.addEventListener('click', event => {
-      if (!event.target.closest?.('[data-t="previous-week"], [data-t="next-week"]')) return;
-      metadataAttempted.clear();
-      setTimeout(() => {
-        queueApply();
-        scanAniListMetadata().then(() => { if (settings.showRomajiTitles) applyRomajiFromCache(); queueApply(); });
-        if (settings.showRomajiTitles) applyRomajiFromCache();
-      }, 350);
-      setTimeout(() => {
-        queueApply();
-        if (settings.showRomajiTitles) applyRomajiFromCache();
-      }, 900);
-    }, true);
-
-    observer.observe(document.documentElement, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['href', 'data-t'] });
+    calendarObserver.observe(document.documentElement, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['href', 'data-t'] });
   }
-  init();
+
+  function stopCalendarMode() {
+    calendarObserver?.disconnect();
+    calendarObserver = null;
+    window.removeEventListener('resize', onCalendarResize);
+    document.removeEventListener('click', onCalendarClick, true);
+    restoreTimezoneNote();
+    for (const id of ['crrcf-gear', 'crrcf-panel', 'crrcf-anilist-progress']) document.getElementById(id)?.remove();
+    const root = document.documentElement;
+    root.classList.remove('crrcf-align-cards', 'crrcf-truncate-titles', 'crrcf-hide-premiere', 'crrcf-wide-calendar');
+    root.style.removeProperty('--crrcf-calendar-inset');
+  }
+
+  // Crunchyroll is a single-page app: moving between the calendar, a series and an
+  // episode does not reload the page, so the content script never starts again.
+  // The router re-checks the URL whenever it may have changed and switches the
+  // matching mode on or off. It stays idle on every other crunchyroll.com page.
+  let lastHref = '';
+  async function route() {
+    if (location.href === lastHref) return;
+    lastHref = location.href;
+    const kind = currentPageKind();
+    if (kind !== 'other') await ensureLoaded();
+    if (location.href !== lastHref) return; // a newer route() call handles the newer URL
+    if (kind !== activeKind) {
+      if (activeKind === 'calendar') stopCalendarMode();
+      if (isTitlePage(activeKind) && !isTitlePage(kind)) stopTitleMode();
+      activeKind = kind;
+    }
+    if (kind === 'calendar') startCalendarMode();
+    else if (isTitlePage(kind)) startTitleMode(); // already running: refreshes the titles
+  }
+
+  function startRouter() {
+    const schedule = () => setTimeout(route, 0);
+    // Immediate reaction where the Navigation API exists (pushState, replaceState, back/forward)…
+    window.navigation?.addEventListener?.('currententrychange', schedule);
+    window.addEventListener('popstate', schedule);
+    // …plus a cheap URL check (one string comparison per tick). Firefox has no
+    // Navigation API (and content scripts cannot see the page's pushState), so
+    // there it is the main trigger and runs 4x more often.
+    setInterval(route, window.navigation ? 1000 : 250);
+    route();
+  }
+
+  // Settings and the AniList cache are read the first time a supported page is
+  // opened, not on every crunchyroll.com page.
+  function normalizeSettings(saved) {
+    const next = { ...DEFAULTS };
+    if (saved && typeof saved === 'object') {
+      // Copy known keys only: this also drops keys left behind by older builds.
+      for (const key of Object.keys(DEFAULTS)) if (saved[key] !== undefined) next[key] = saved[key];
+    }
+    if (!Array.isArray(next.selectedLanguages)) next.selectedLanguages = [...DEFAULTS.selectedLanguages];
+    next.selectedLanguages = next.selectedLanguages.filter(code => LANGUAGES.some(x => x[0] === code));
+    const level = Math.round(Number(next.calendarWidthLevel));
+    next.calendarWidthLevel = Number.isFinite(level)
+      ? Math.max(0, Math.min(WIDTH_LEVELS.length - 1, level))
+      : DEFAULTS.calendarWidthLevel;
+    next.schemaVersion = SCHEMA_VERSION;
+    return next;
+  }
+
+  let loadPromise = null;
+  function ensureLoaded() {
+    loadPromise ||= (async () => {
+      const saved = await loadSettings();
+      await loadMetadataCache();
+      settings = normalizeSettings(saved);
+      // Future migrations: branch on saved?.schemaVersion here, then store the new version.
+      if (!saved || saved.schemaVersion !== SCHEMA_VERSION) saveSettings();
+    })();
+    return loadPromise;
+  }
+
+  startRouter();
 })();
