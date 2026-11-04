@@ -1,0 +1,41 @@
+{
+  "manifest_version": 3,
+  "name": "Crunchyroll Release Calendar Filter",
+  "version": "0.2.11",
+  "description": "Experimental toggle placement restored inside the watch title container; retains delayed watch-page metadata detection.",
+  "permissions": [
+    "storage"
+  ],
+  "host_permissions": [
+    "https://www.crunchyroll.com/*",
+    "https://graphql.anilist.co/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.crunchyroll.com/releasecalendar*",
+        "https://www.crunchyroll.com/*/releasecalendar*",
+        "https://www.crunchyroll.com/series/*",
+        "https://www.crunchyroll.com/watch/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "css": [
+        "content.css"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "cr-releasecalendar-filter-test@example.invalid"
+    }
+  }
+}

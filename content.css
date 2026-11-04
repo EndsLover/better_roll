@@ -1,0 +1,235 @@
+/* Replace the native 24-hour toggle in-place with the original simple gear icon. */
+.crrcf-timearea { display: flex !important; align-items: center !important; justify-content: flex-end !important; gap: 10px !important; }
+.erc-time-format-toggle.crrcf-native-time-proxy,
+.erc-time-format-toggle[aria-hidden="true"] { display: none !important; visibility: hidden !important; width: 0 !important; height: 0 !important; overflow: hidden !important; }
+#crrcf-gear {
+  display: inline-grid; place-items: center; flex: 0 0 auto;
+  width: 34px; height: 34px; padding: 0; margin-left: auto;
+  color: #17171b; background: #f47521; border: 0;
+  border-radius: 50%; cursor: pointer; font: 24px/1 Arial, sans-serif;
+  transition: filter .15s, transform .15s;
+}
+#crrcf-gear:hover { filter: brightness(1.08); transform: rotate(18deg); }
+#crrcf-gear.crrcf-floating-gear { position: fixed; top: 24px; right: 24px; z-index: 2147483000; }
+.crrcf-anilist-progress { display: inline-block; flex: 0 0 15px; width: 15px; height: 15px; box-sizing: border-box; border: 2px solid rgba(244,117,33,.28); border-top-color: #f47521; border-right-color: #f47521; border-radius: 50%; animation: crrcf-spin .75s linear infinite; vertical-align: middle; }
+.crrcf-anilist-progress[hidden] { display: none !important; }
+.crrcf-anilist-progress.crrcf-floating-progress { position: fixed; top: 33px; right: 68px; z-index: 2147483000; }
+@keyframes crrcf-spin { to { transform: rotate(360deg); } }
+.crrcf-native-time-proxy { display: none !important; }
+#crrcf-panel {
+  position: absolute; z-index: 2147483001; top: 88px; right: 22px;
+  width: min(390px, calc(100vw - 28px)); max-height: min(78vh, 760px); overflow: auto;
+  box-sizing: border-box; padding: 18px; color: #f8f8f8; background: #17171b;
+  border: 1px solid rgba(255,255,255,.13); border-radius: 12px;
+  box-shadow: 0 12px 42px rgba(0,0,0,.42);
+  font: 14px/1.4 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+#crrcf-panel[hidden] { display: none !important; }
+#crrcf-panel.crrcf-panel-fixed { position: fixed !important; }
+#crrcf-panel {
+  scrollbar-width: thin;
+  scrollbar-color: #4a4a53 transparent;
+}
+#crrcf-panel::-webkit-scrollbar { width: 8px; }
+#crrcf-panel::-webkit-scrollbar-track { background: transparent; margin: 8px 0; }
+#crrcf-panel::-webkit-scrollbar-thumb { background: #44444d; border: 2px solid #17171b; border-radius: 8px; }
+#crrcf-panel::-webkit-scrollbar-thumb:hover { background: #60606a; }
+.crrcf-panel-head { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 18px; }
+.crrcf-panel-head strong { display: block; font-size: 18px; font-weight: 650; letter-spacing: -.02em; }
+.crrcf-eyebrow { margin-bottom: 3px; color: #a5a5af; font-size: 10px; font-weight: 700; letter-spacing: .13em; }
+#crrcf-close { width: 30px; height: 30px; color: #ddd; background: transparent; border: 0; border-radius: 6px; font-size: 23px; line-height: 1; cursor: pointer; }
+#crrcf-close:hover { background: rgba(255,255,255,.08); }
+.crrcf-section-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-bottom: 11px; font-weight: 650; }
+.crrcf-language-actions { display: flex; justify-content: flex-end; gap: 5px; }
+.crrcf-language-actions button { padding: 4px 8px; color: #d8d8de; background: #26262c; border: 1px solid #3a3a42; border-radius: 6px; font: inherit; font-size: 11px; cursor: pointer; }
+.crrcf-language-actions button:hover, .crrcf-language-actions button.is-active { background: #36363f; border-color: #5b5b68; color: white; }
+.crrcf-language-details { padding: 0 0 15px; margin-bottom: 3px; border-bottom: 1px solid rgba(255,255,255,.11); }
+.crrcf-language-details summary { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 4px 0 11px; cursor: pointer; font-weight: 650; list-style: none; }
+.crrcf-language-details summary::-webkit-details-marker { display: none; }
+.crrcf-language-details summary::after { content: "▾"; color: #aaaab4; margin-left: auto; }
+.crrcf-language-details[open] summary::after { content: "▴"; }
+#crrcf-language-summary { margin-left: auto; color: #aaaab4; font-size: 11px; font-weight: 450; }
+.crrcf-languages { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 8px; padding: 11px 0 2px; }
+.crrcf-language-chip { display: grid; grid-template-columns: 28px minmax(0, 1fr); position: relative; align-items: center; gap: 7px; min-width: 0; padding: 7px 8px; color: #bcbcc5; background: #242429; border: 1px solid #3a3a42; border-radius: 7px; cursor: pointer; user-select: none; transition: background .12s, border-color .12s; }
+.crrcf-language-chip:hover { background: #303037; }
+.crrcf-language-chip.is-selected { color: #fff; background: rgba(244,117,33,.16); border-color: #f47521; box-shadow: inset 3px 0 0 #f47521; }
+.crrcf-language-chip input { position: absolute; opacity: 0; width: 1px; height: 1px; pointer-events: none; }
+.crrcf-language-chip:focus-within { outline: 2px solid #f47521; outline-offset: 2px; }
+.crrcf-language-code { width: 28px; font-size: 11px; font-weight: 750; letter-spacing: .02em; }
+.crrcf-language-name { min-width: 0; overflow: visible; text-overflow: clip; white-space: normal; overflow-wrap: anywhere; font-size: 12px; line-height: 1.25; }
+
+.crrcf-settings-list { display: grid; margin-top: 5px; }
+.crrcf-setting-row { display: flex; align-items: center; gap: 14px; min-height: 49px; padding: 9px 1px; border-bottom: 1px solid rgba(255,255,255,.09); cursor: pointer; }
+.crrcf-setting-label { flex: 1; color: #e7e7eb; font-size: 13px; }
+.crrcf-setting-row input { position: absolute; opacity: 0; width: 1px; height: 1px; pointer-events: none; }
+/* Toggle proportions and animation are deliberately close to the site's time switch. */
+.crrcf-toggle { position: relative; flex: 0 0 38px; width: 38px; height: 22px; border-radius: 20px; background: #48484f; transition: background .15s; }
+.crrcf-toggle::after { content: ""; position: absolute; left: 3px; top: 3px; width: 16px; height: 16px; border-radius: 50%; background: #f5f5f6; transition: transform .15s; box-shadow: 0 1px 2px #0004; }
+.crrcf-setting-row input:checked + .crrcf-toggle { background: #f47521; }
+.crrcf-setting-row input:checked + .crrcf-toggle::after { transform: translateX(16px); }
+.crrcf-setting-row input:focus-visible + .crrcf-toggle { outline: 2px solid white; outline-offset: 2px; }
+.crrcf-timezone-note { box-sizing: border-box; padding: 14px 1px 3px; margin: 3px 0 0; color: #a5a5af; font-size: 11px; line-height: 1.4; border: 0 !important; background: transparent !important; }
+.crrcf-timezone-note .timezone-note { position: static !important; display: block !important; box-sizing: border-box; min-height: 0 !important; padding: 0 !important; margin: 0 !important; border: 0 !important; border-radius: 0 !important; box-shadow: none !important; background: transparent !important; color: inherit !important; font: inherit !important; line-height: inherit !important; }
+.crrcf-hidden-count { margin: 5px 0 0; color: #9a9aa4; font-size: 11px; font-weight: 400; line-height: 1.3; text-align: center; }
+/* Alignment is set in JS to a measured common height per visible slot. */
+html.crrcf-align-cards [data-t="release-cell"] { box-sizing: border-box !important; align-self: stretch !important; }
+
+@media (max-width: 440px) { .crrcf-languages { grid-template-columns: minmax(0, 1fr); } }
+
+/* The alignment spacer uses the actual badge height measured from Crunchyroll's current card markup. */
+html.crrcf-align-cards:not(.crrcf-hide-premiere) [data-t="release-calendar-card"]:not(.crrcf-has-premiere) [class*="thumbnail-wrapper"] { margin-top: 22px !important; }
+
+/* Optional compact titles: clamp release-card titles to two lines. */
+html.crrcf-truncate-titles [data-t="series-page-link"] { display: -webkit-box !important; -webkit-box-orient: vertical !important; -webkit-line-clamp: 2 !important; overflow: hidden !important; text-overflow: ellipsis !important; white-space: normal !important; overflow-wrap: anywhere; line-height: 1.35em !important; max-height: 2.7em !important; }
+
+
+/* Keep diagnostic output attached to the switch it describes, inside that setting's divider. */
+.crrcf-setting-block { min-width: 0; border-bottom: 1px solid rgba(255,255,255,.09); }
+.crrcf-setting-block > .crrcf-setting-row { border-bottom: 0; }
+.crrcf-setting-block > .crrcf-setting-status { margin: -2px 1px 12px; overflow-wrap: anywhere; color: #a5a5af; font-size: 11px; line-height: 1.35; }
+.crrcf-setting-block.crrcf-time-block > .crrcf-setting-row { border-bottom: 0; }
+.crrcf-timezone-note { padding: 0 1px 12px !important; margin: -2px 0 0 !important; }
+
+
+/* The Crunchyroll navigation/header must remain above the extension settings panel. */
+.erc-large-header[data-t="header-default"] {
+  z-index: 2147483002 !important;
+}
+
+/* Calendar size levels use symmetric side gutters, from original width to full viewport width. */
+html.crrcf-wide-calendar .page-wrapper--5HUY2.erc-release-calendar,
+html.crrcf-wide-calendar .erc-release-calendar.page-wrapper--5HUY2 {
+  width: calc(100vw - var(--crrcf-calendar-inset, 0vw) - var(--crrcf-calendar-inset, 0vw)) !important;
+  max-width: none !important;
+  box-sizing: border-box !important;
+  position: relative !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+}
+html.crrcf-wide-calendar .erc-release-calendar .content-wrapper--MF5LS,
+html.crrcf-wide-calendar .erc-release-calendar [data-t="release-calendar-content"],
+html.crrcf-wide-calendar .erc-release-calendar [data-t="week-grid"],
+html.crrcf-wide-calendar .erc-release-calendar .erc-week-grid {
+  width: 100% !important;
+  max-width: none !important;
+  box-sizing: border-box !important;
+}
+html.crrcf-wide-calendar .erc-release-calendar .erc-week-grid {
+  grid-template-columns: repeat(7, minmax(0, 1fr)) !important;
+}
+.crrcf-width-control { padding: 15px 1px 17px; border-bottom: 1px solid rgba(255,255,255,.09); }
+.crrcf-width-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.crrcf-width-heading strong { color: #e7e7eb; font-size: 13px; font-weight: 500; }
+.crrcf-width-heading span { color: #f8a36b; font-size: 12px; font-weight: 650; font-variant-numeric: tabular-nums; }
+#crrcf-width-slider { display: block; width: 100%; height: 20px; margin: 0; accent-color: #f47521; cursor: pointer; background: transparent; touch-action: pan-y; }
+#crrcf-width-slider:focus-visible { outline: 2px solid #f47521; outline-offset: 3px; border-radius: 4px; }
+
+
+/* Group related controls into compact collapsible sections. */
+.crrcf-accordion { margin-top: 4px; }
+.crrcf-accordion > summary { min-height: 34px; }
+#crrcf-style-settings { display: grid; }
+#crrcf-original-audio-slot { display: grid; }
+.crrcf-style-options { margin-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,.11) !important; padding-bottom: 9px; }
+.crrcf-inline-action {
+  flex: 0 0 auto; padding: 5px 9px; color: #dedee4; background: #292930;
+  border: 1px solid #44444d; border-radius: 6px; font: inherit; font-size: 11px;
+  line-height: 1.25; cursor: pointer;
+}
+.crrcf-inline-action:hover { color: white; background: #383840; border-color: #666672; }
+.crrcf-primary-action { color: #17171b; background: #f47521; border-color: #f47521; font-weight: 650; }
+.crrcf-primary-action:hover { color: #17171b; background: #ff9147; border-color: #ff9147; }
+#crrcf-romaji-title-status { margin-bottom: 9px; }
+.crrcf-setting-block > .crrcf-inline-action { margin: 0 1px 10px; }
+.crrcf-width-heading strong { font-size: 13px; }
+.crrcf-memory-controls { padding: 14px 1px 3px; border-top: 1px solid rgba(255,255,255,.11); }
+.crrcf-memory-actions { display: flex; justify-content: center; align-items: center; gap: 10px; flex-wrap: wrap; }
+#crrcf-memory-editor { margin-top: 10px; }
+#crrcf-memory-editor[hidden] { display: none !important; }
+#crrcf-memory-json {
+  display: block; box-sizing: border-box; width: 100%; min-height: 220px; resize: vertical;
+  padding: 9px; color: #e7e7eb; background: #101014; border: 1px solid #41414b;
+  border-radius: 7px; font: 11px/1.45 ui-monospace, SFMono-Regular, Consolas, monospace;
+  tab-size: 2;
+}
+#crrcf-memory-json:focus { outline: 2px solid #f47521; outline-offset: 1px; }
+#crrcf-memory-editor .crrcf-memory-actions { margin-top: 8px; }
+#crrcf-memory-status { margin: 8px 1px 0; overflow-wrap: anywhere; color: #a5a5af; font-size: 11px; }
+
+
+
+/* Compact icon actions stay on the same line as their associated controls. */
+.crrcf-icon-action {
+  display: inline-grid; place-items: center; flex: 0 0 32px; width: 32px; height: 32px;
+  padding: 0; color: #f47521; background: transparent; border: 1px solid #f47521;
+  border-radius: 7px; font: 19px/1 system-ui, sans-serif; cursor: pointer;
+}
+.crrcf-icon-action:hover { color: #17171b; background: #f47521; border-color: #f47521; }
+.crrcf-icon-action.is-active { color: #17171b; background: #f47521; border-color: #f47521; }
+#crrcf-style-settings > .crrcf-setting-block:last-child,
+#crrcf-original-audio-slot > .crrcf-setting-block:last-child { border-bottom: 0; }
+.crrcf-style-options { padding-bottom: 0; }
+.crrcf-style-options[open] { padding-bottom: 9px; }
+.crrcf-logs-viewer { margin-top: 10px; }
+.crrcf-logs-viewer[hidden] { display: none !important; }
+#crrcf-logs-output {
+  display: block; box-sizing: border-box; width: 100%; min-height: 150px; max-height: 260px;
+  resize: vertical; padding: 9px; color: #e7e7eb; background: #101014;
+  border: 1px solid #41414b; border-radius: 7px; font: 11px/1.45 ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+
+
+
+/* Explicit divider between Style Options and Calendar size. */
+.crrcf-section-divider { height: 1px; margin: 9px 0 10px; background: rgba(255,255,255,.14); }
+
+/* Consistent outline icon treatment for all action controls. */
+.crrcf-icon-action svg, .crrcf-inline-action svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.crrcf-icon-action svg { width: 18px; height: 18px; }
+
+/* Retry is part of the centered footer action group. */
+.crrcf-romaji-retry { flex: 0 0 32px; }
+
+/* Keep both collapsed accordions the same size and remove the duplicate gap. */
+.crrcf-accordion { box-sizing: border-box; width: 100%; margin-top: 0 !important; }
+.crrcf-language-details { padding-bottom: 0; margin-bottom: 0; }
+.crrcf-language-details > summary { box-sizing: border-box; min-height: 34px; padding-top: 7px; padding-bottom: 7px; }
+.crrcf-style-options { margin-bottom: 0 !important; padding-bottom: 0 !important; border-bottom: 0 !important; }
+.crrcf-style-options[open] { padding-bottom: 0 !important; }
+.crrcf-section-divider { height: 1px; margin: 0; background: rgba(255,255,255,.11); }
+.crrcf-width-control { margin-top: 0; }
+
+
+/* Watch-page title reading toggle (consultive only; does not change settings). */
+.crrcf-watch-reading-toggle-wrapper {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  flex: 0 0 auto !important;
+  width: 25px !important;
+  height: 25px !important;
+  margin: 0 8px 0 0 !important;
+  padding: 0 !important;
+  vertical-align: middle !important;
+}
+.crrcf-watch-reading-toggle {
+  display: inline-grid !important;
+  place-items: center !important;
+  flex: 0 0 auto !important;
+  width: 25px !important;
+  height: 25px !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  color: #f47521 !important;
+  background: transparent !important;
+  border: 1px solid rgba(244,117,33,.75) !important;
+  border-radius: 6px !important;
+  font: 600 15px/1 system-ui, sans-serif !important;
+  cursor: pointer !important;
+  vertical-align: middle !important;
+}
+.crrcf-watch-reading-toggle:hover {
+  color: #17171b !important;
+  background: #f47521 !important;
+}
+
