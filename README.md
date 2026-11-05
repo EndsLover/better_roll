@@ -15,7 +15,7 @@ A browser extension that makes Crunchyroll's **Release Calendar** easier to use:
 
 ## Install
 
-**From the store:** Chrome Web Store link coming soon.
+**From the store:** [Better Roll on the Chrome Web Store](https://chromewebstore.google.com/detail/better-roll/jpgogonhlodbhnlnnojodekngmdchfkn).
 
 **From source (Chrome / Edge):**
 
