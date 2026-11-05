@@ -16,6 +16,7 @@ First public release, renamed to **Better Roll**.
 - Cleaner manifest description, and a real Firefox add-on ID.
 
 ### Fixed
+- Romaji titles now work for shows from any country. Before, the romaji title was only saved for Japanese shows, so Chinese and Korean shows (for example *Paw & Palaces*) were found on AniList but never renamed; for those, AniList's "romaji" is the pinyin/romanisation. Older cache entries are looked up again automatically.
 - Navigating between the calendar, series pages and episode pages without reloading now switches features on and off correctly; previously the page type was decided once at load.
 - Locale-prefixed URLs (`/pt-br/…`, `/de/…`, etc.) are supported on the calendar, series and episode pages.
 - Series pages in other languages: the localized "Watch" prefix in the page metadata is no longer treated as part of the show title.

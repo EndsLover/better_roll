@@ -9,7 +9,7 @@ A browser extension that makes Crunchyroll's **Release Calendar** easier to use:
 - **Audio-language filter** – show only the releases that have the dubs you care about (Japanese by default).
 - **Hidden counters** – each day shows how many cards your filters are hiding, so nothing disappears silently.
 - **Always show original-audio releases** *(optional)* – keeps a release visible when its likely original-language track is available, even if that language is not selected.
-- **Romaji titles** *(optional)* – replaces show titles with their romaji title on the calendar, series pages and episode pages.
+- **Romaji titles** *(optional)* – replaces show titles with their romaji title (pinyin/romanisation for Chinese and Korean shows) on the calendar, series pages and episode pages.
 - **Layout tweaks** – align cards, hide `PREMIERE` labels, clamp long titles to two lines, and widen the calendar.
 - **24-hour time** – a toggle for the calendar's time format.
 

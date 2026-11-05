@@ -30,6 +30,8 @@
   };
   // Bump when a stored setting changes meaning and needs a one-time migration.
   const SCHEMA_VERSION = 1;
+  // Version of the AniList cache records (v2: romaji saved for every country, not only JP).
+  const CACHE_RECORD_VERSION = 2;
   let settings = { ...DEFAULTS, schemaVersion: SCHEMA_VERSION };
   let applying = false;
   let queued = false;
@@ -282,7 +284,10 @@
   async function loadMetadataCache() {
     const result = await storageGet(METADATA_CACHE_KEY);
     for (const [key, value] of Object.entries(result || {})) {
-      if (value && typeof value === 'object' && value.crunchyrollTitle && value.countryOfOrigin) metadataByTitle.set(key, value);
+      if (!value || typeof value !== 'object' || !value.crunchyrollTitle || !value.countryOfOrigin) continue;
+      // Before v2, romaji was only saved for Japanese shows: look non-JP entries up again.
+      if (value.v !== CACHE_RECORD_VERSION && value.countryOfOrigin !== 'JP' && !value.romajiTitle) continue;
+      metadataByTitle.set(key, value);
     }
   }
 
@@ -317,10 +322,12 @@
           }
           const record = {
             crunchyrollTitle,
-            romajiTitle: exact.countryOfOrigin === 'JP' && exact.title?.romaji && !/[\u3040-\u30ff\u3400-\u9fff]/.test(exact.title.romaji) ? exact.title.romaji : null,
+            // Any country: for Chinese/Korean shows AniList's "romaji" is the pinyin/romanisation.
+            romajiTitle: exact.title?.romaji && !/[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]/.test(exact.title.romaji) ? exact.title.romaji : null,
             countryOfOrigin: exact.countryOfOrigin,
             anilistId: exact.id,
-            anilistType: exact.type
+            anilistType: exact.type,
+            v: CACHE_RECORD_VERSION
           };
           metadataByTitle.set(key, record);
           saveMetadataCache();
@@ -625,7 +632,8 @@
           romajiTitle: value.romajiTitle ? String(value.romajiTitle) : null,
           countryOfOrigin: String(value.countryOfOrigin).toUpperCase(),
           anilistId: value.anilistId ?? null,
-          anilistType: value.anilistType ?? null
+          anilistType: value.anilistType ?? null,
+          v: CACHE_RECORD_VERSION
         });
       }
       metadataByTitle.clear();
