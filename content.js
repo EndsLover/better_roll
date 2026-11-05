@@ -599,7 +599,7 @@
     for (const [code, name] of [...TITLE_COUNTRIES, [OTHER_COUNTRY, 'Others']]) {
       const selected = settings.romanizeCountries.includes(code);
       const label = document.createElement('label');
-      label.className = 'crrcf-language-chip crrcf-country-chip' + (selected ? ' is-selected' : '');
+      label.className = 'crrcf-language-chip' + (selected ? ' is-selected' : '');
       label.title = code === OTHER_COUNTRY ? 'Shows made in any other country' : `Shows made in ${name}`;
       const input = document.createElement('input'); input.type = 'checkbox'; input.checked = selected;
       input.setAttribute('aria-label', label.title);
@@ -610,8 +610,9 @@
         label.classList.toggle('is-selected', input.checked);
         updateTitleSummary(); saveSettings(); applyRomajiTitles();
       });
+      const codeText = document.createElement('span'); codeText.className = 'crrcf-language-code'; codeText.textContent = code === OTHER_COUNTRY ? '??' : code;
       const nameText = document.createElement('span'); nameText.className = 'crrcf-language-name'; nameText.textContent = name;
-      label.append(input, nameText); root.append(label);
+      label.append(input, codeText, nameText); root.append(label);
     }
   }
 
