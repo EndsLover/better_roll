@@ -48,7 +48,9 @@
 .crrcf-language-details summary::-webkit-details-marker { display: none; }
 .crrcf-language-details summary::after { content: "▾"; color: #aaaab4; margin-left: auto; }
 .crrcf-language-details[open] summary::after { content: "▴"; }
-#crrcf-language-summary { margin-left: auto; color: #aaaab4; font-size: 11px; font-weight: 450; }
+#crrcf-language-summary, .crrcf-section-summary { margin-left: auto; color: #aaaab4; font-size: 11px; font-weight: 450; }
+.crrcf-section-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.crrcf-section-hint { flex: 1; margin: 0; color: #a5a5af; font-size: 12px; line-height: 1.35; }
 .crrcf-languages { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 8px; padding: 11px 0 2px; }
 .crrcf-language-chip { display: grid; grid-template-columns: 28px minmax(0, 1fr); position: relative; align-items: center; gap: 7px; min-width: 0; padding: 7px 8px; color: #bcbcc5; background: #242429; border: 1px solid #3a3a42; border-radius: 7px; cursor: pointer; user-select: none; transition: background .12s, border-color .12s; }
 .crrcf-language-chip:hover { background: #303037; }
@@ -97,8 +99,7 @@ html.crrcf-truncate-titles [data-t="series-page-link"] { display: -webkit-box !i
 }
 
 /* Calendar size levels use symmetric side gutters, from original width to full viewport width. */
-html.crrcf-wide-calendar .page-wrapper--5HUY2.erc-release-calendar,
-html.crrcf-wide-calendar .erc-release-calendar.page-wrapper--5HUY2 {
+html.crrcf-wide-calendar .erc-release-calendar {
   width: calc(100vw - var(--crrcf-calendar-inset, 0vw) - var(--crrcf-calendar-inset, 0vw)) !important;
   max-width: none !important;
   box-sizing: border-box !important;
@@ -106,7 +107,9 @@ html.crrcf-wide-calendar .erc-release-calendar.page-wrapper--5HUY2 {
   left: 50% !important;
   transform: translateX(-50%) !important;
 }
-html.crrcf-wide-calendar .erc-release-calendar .content-wrapper--MF5LS,
+/* Crunchyroll's CSS-module class names end in a build hash (content-wrapper--MF5LS), so match the stable prefix. */
+html.crrcf-wide-calendar .erc-release-calendar > [class^="content-wrapper--"],
+html.crrcf-wide-calendar .erc-release-calendar > [class*=" content-wrapper--"],
 html.crrcf-wide-calendar .erc-release-calendar [data-t="release-calendar-content"],
 html.crrcf-wide-calendar .erc-release-calendar [data-t="week-grid"],
 html.crrcf-wide-calendar .erc-release-calendar .erc-week-grid {
@@ -233,3 +236,4 @@ html.crrcf-wide-calendar .erc-release-calendar .erc-week-grid {
   background: #f47521 !important;
 }
 
+#crrcf-title-settings { margin-top: 8px; }

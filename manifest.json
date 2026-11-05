@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Crunchyroll Release Calendar Filter",
-  "version": "0.2.11",
-  "description": "Experimental toggle placement restored inside the watch title container; retains delayed watch-page metadata detection.",
+  "name": "Better Roll",
+  "version": "1.0.0",
+  "description": "Filter Crunchyroll's Release Calendar by audio language, tidy its layout and optionally show romaji titles. Unofficial.",
   "permissions": [
     "storage"
   ],
@@ -13,10 +13,7 @@
   "content_scripts": [
     {
       "matches": [
-        "https://www.crunchyroll.com/releasecalendar*",
-        "https://www.crunchyroll.com/*/releasecalendar*",
-        "https://www.crunchyroll.com/series/*",
-        "https://www.crunchyroll.com/watch/*"
+        "https://www.crunchyroll.com/*"
       ],
       "js": [
         "content.js"
@@ -35,7 +32,7 @@
   },
   "browser_specific_settings": {
     "gecko": {
-      "id": "cr-releasecalendar-filter-test@example.invalid"
+      "id": "better-roll@endslover.github.io"
     }
   }
 }

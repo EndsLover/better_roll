@@ -1,0 +1,13 @@
+# Local settings exports / scratch
+*.local.json
+*-settings*.json
+settings-backup*
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Build output
+*.zip
