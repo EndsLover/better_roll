@@ -8,7 +8,7 @@ Better Roll is an unofficial browser extension for crunchyroll.com. This page ex
 
 - Better Roll has **no servers, no accounts and no analytics**, and it does not sell or share your data.
 - Your settings and saved lookup results are stored **only in your browser**.
-- Two optional features, **Romaji titles** and **Always show original-audio releases**, send show titles to **AniList**. Both are **off by default**.
+- Two optional features, **Title Options** (romanized titles, when at least one country is ticked) and **Always show original-audio releases**, send show titles to **AniList**. Both are **off by default**.
 
 ## What is stored on your device
 
@@ -21,7 +21,7 @@ This data never leaves your device through Better Roll. It is not synced to your
 
 ## What is sent over the network
 
-Only when **Romaji titles** or **Always show original-audio releases** is switched on, Better Roll looks up show titles it sees on crunchyroll.com (release calendar titles, and recommendation titles on series pages) on AniList's public API at `https://graphql.anilist.co`.
+Only when at least one country is ticked in **Title Options** or **Always show original-audio releases** is switched on, Better Roll looks up show titles it sees on crunchyroll.com (release calendar titles, and recommendation titles on series pages) on AniList's public API at `https://graphql.anilist.co`.
 
 - What is sent: the show title text, as a search query.
 - What is not sent: your Crunchyroll account details, cookies, watch history or any other personal information. Requests carry no credentials.

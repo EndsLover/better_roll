@@ -8,7 +8,7 @@ Copy these into the Developer Dashboard. Everything here matches the 1.0.0 code;
 
 **Summary (max 132 characters):**
 
-> Filter Crunchyroll's Release Calendar by audio language, tidy its layout and optionally show romaji titles. Unofficial.
+> Filter Crunchyroll's Release Calendar by audio language, tidy its layout and optionally show romanized titles. Unofficial.
 
 **Category:** Entertainment
 
@@ -19,7 +19,7 @@ Copy these into the Developer Dashboard. Everything here matches the 1.0.0 code;
 > • Audio-language filter – only see releases with the dubs you care about (Japanese by default).
 > • Hidden counters – every day shows how many cards your filters are hiding.
 > • Always show original-audio releases (optional) – keep a release visible when its likely original-language audio is available.
-> • Romaji titles (optional) – show romaji titles on the calendar, series pages and episode pages.
+> • Romanized titles (optional) – choose which countries (Japan, China, Korea, others) get romanized titles on the calendar, series pages and episode pages.
 > • Layout tweaks – align cards, hide PREMIERE labels, clamp long titles and widen the calendar.
 > • 24-hour time toggle.
 >
@@ -37,13 +37,13 @@ Copy these into the Developer Dashboard. Everything here matches the 1.0.0 code;
 
 **Single purpose:**
 
-> Improve the usability of the Crunchyroll Release Calendar by filtering releases by audio language, adjusting its layout, and optionally showing romaji titles.
+> Improve the usability of the Crunchyroll Release Calendar by filtering releases by audio language, adjusting its layout, and optionally showing romanized titles.
 
 **Permission justifications:**
 
 - `storage` – saves the user's settings and a local cache of AniList lookup results.
 - Host permission `https://www.crunchyroll.com/*` – the extension reads and restyles the Release Calendar, series pages and episode pages. It runs on every crunchyroll.com page only so it can follow in-site navigation, and does nothing on pages other than those three.
-- Host permission `https://graphql.anilist.co/*` – looks up show titles on AniList's public API for the optional "Romaji titles" and "Always show original-audio releases" features.
+- Host permission `https://graphql.anilist.co/*` – looks up show titles on AniList's public API for the optional "Title Options" (romanized titles) and "Always show original-audio releases" features.
 
 **Remote code:** No. All code is in the package.
 

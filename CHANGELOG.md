@@ -5,7 +5,9 @@
 First public release, renamed to **Better Roll**.
 
 ### Changed
-- **Always show original-audio releases** (formerly "Force original audio") is now **off by default**. AniList is only contacted while it or **Romaji titles** is on.
+- New **Title Options** section: tick the countries (Japan, China, Korea, Others) whose shows get romanized titles, with **All** / **None**. It replaces the single *Romaji titles* switch, nothing is ticked by default, and **Limit long titles** moved here. Settings from test builds with Romaji titles on are migrated to all four boxes ticked (`schemaVersion` 2). The **あ** button on episode pages only appears for ticked countries.
+- Section hint texts: "Show releases with these audio languages" and "Show original (romanized) titles of shows made in:".
+- **Always show original-audio releases** (formerly "Force original audio") is now **off by default**. AniList is only contacted while it is on or a country is ticked in **Title Options**.
 - AniList lookups search **anime only** (the extra manga request for unmatched titles is gone).
 - AniList requests are spaced 2.1 s apart. On HTTP 429 all lookups pause and then retry the same title, for the `Retry-After` time when the browser exposes it and otherwise 60 s, until it succeeds.
 - Audio languages are read from the card's `aria-label` instead of matching localized label text, so the filter works with any Crunchyroll interface language.

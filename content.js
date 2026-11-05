@@ -15,11 +15,18 @@
     ['TL', 'Tagalog']
   ];
   const COMMON_LANGS = new Set(['JA', 'EN', 'PT', 'ES', 'FR', 'DE', 'IT', 'KO', 'ZH']);
+  // Origin countries offered in Title Options; every other country is grouped as OTHER_COUNTRY.
+  // To offer another country (say TW), add a line here and nothing else.
+  const TITLE_COUNTRIES = [['JP', 'Japan'], ['CN', 'China'], ['KR', 'Korea']];
+  const OTHER_COUNTRY = 'OTHER';
+  const NO_COUNTRY_MESSAGE = 'Global titles are shown. Pick a country to show romanized titles.';
+  const LOOKUP_NOTICE = 'Titles are looked up on AniList (graphql.anilist.co) to find each show\u2019s country of origin.';
   const DEFAULTS = {
     selectedLanguages: ['JA'],
     hiddenCounters: true,
     time24h: false,
-    showRomajiTitles: false,
+    // Countries whose shows get their romanized title ('JP', 'CN', 'KR' or 'OTHER'). Empty = off.
+    romanizeCountries: [],
     alignCards: true,
     includeUnknownLanguages: false,
     hidePremiereBadges: true,
@@ -29,7 +36,7 @@
     truncateTitles: true
   };
   // Bump when a stored setting changes meaning and needs a one-time migration.
-  const SCHEMA_VERSION = 1;
+  const SCHEMA_VERSION = 2;
   // Version of the AniList cache records (v2: romaji saved for every country, not only JP).
   const CACHE_RECORD_VERSION = 2;
   let settings = { ...DEFAULTS, schemaVersion: SCHEMA_VERSION };
@@ -197,7 +204,7 @@
   }
   function refreshAfterAniListResponse() {
     queueApply();
-    if (settings.showRomajiTitles) requestAnimationFrame(() => applyRomajiFromCache());
+    if (romajiEnabled()) requestAnimationFrame(() => applyRomajiFromCache());
   }
   function recentLogLines() {
     const cutoff = Date.now() - 120000;
@@ -374,11 +381,18 @@
   let metadataScanRerunRequested = false;
   // AniList is only contacted while a feature that needs it is switched on, so a
   // default install sends nothing to third parties.
-  function anilistFeaturesEnabled() { return Boolean(settings.showRomajiTitles || settings.keepOriginalAudio); }
+  function romajiEnabled() { return settings.romanizeCountries.length > 0; }
+  // The romanized title to show for this record, or null when its country is not selected.
+  function romajiFor(record) {
+    if (!record?.romajiTitle) return null;
+    const country = TITLE_COUNTRIES.some(([code]) => code === record.countryOfOrigin) ? record.countryOfOrigin : OTHER_COUNTRY;
+    return settings.romanizeCountries.includes(country) ? record.romajiTitle : null;
+  }
+  function anilistFeaturesEnabled() { return Boolean(romajiEnabled() || settings.keepOriginalAudio); }
 
   async function scanAniListMetadata() {
     if (!anilistFeaturesEnabled()) {
-      romajiTitleStatus = 'AniList lookups are off. Enable Romaji titles or Always show original-audio to use them.';
+      romajiTitleStatus = NO_COUNTRY_MESSAGE;
       updateRomajiTitleStatus();
       return;
     }
@@ -412,7 +426,7 @@
       updateAniListActivity();
       metadataScanPromise = null;
       queueApply();
-      if (settings.showRomajiTitles) requestAnimationFrame(() => applyRomajiFromCache());
+      if (romajiEnabled()) requestAnimationFrame(() => applyRomajiFromCache());
       if (metadataScanRerunRequested) {
         metadataScanRerunRequested = false;
         Promise.resolve().then(() => scanAniListMetadata());
@@ -426,15 +440,20 @@
     let found = 0, missing = 0;
     for (const item of items) {
       const record = metadataByTitle.get(titleKey(item.title));
-      if (record?.romajiTitle) {
+      const romaji = romajiEnabled() ? romajiFor(record) : null;
+      if (romaji) {
         found++;
-        for (const link of item.links) link.textContent = record.romajiTitle;
-      } else missing++;
+        for (const link of item.links) if (link.textContent !== romaji) link.textContent = romaji;
+      } else {
+        // Not selected (or no match): show the global title again.
+        if (romajiEnabled() && !record?.romajiTitle) missing++;
+        for (const link of item.links) if (link.textContent !== item.title) link.textContent = item.title;
+      }
     }
-    if (settings.showRomajiTitles) {
-      romajiTitleStatus = `Romaji titles: ${found} found, ${missing} not matched (${items.length} titles in calendar).`;
+    if (romajiEnabled()) {
+      romajiTitleStatus = `Romanized titles: ${found} shown, ${missing} not matched (${items.length} titles in calendar).`;
     } else {
-      for (const item of items) for (const link of item.links) link.textContent = item.title;
+      romajiTitleStatus = NO_COUNTRY_MESSAGE;
     }
     updateRomajiTitleStatus();
     requestAnimationFrame(() => {
@@ -445,15 +464,14 @@
   }
 
   async function applyRomajiTitles() {
-    if (!settings.showRomajiTitles) {
+    if (!romajiEnabled()) {
       applyRomajiFromCache();
-      romajiTitleStatus = 'Romaji titles disabled.';
       updateRomajiTitleStatus();
       return;
     }
     applyRomajiFromCache();
     await scanAniListMetadata();
-    if (settings.showRomajiTitles) applyRomajiFromCache();
+    if (romajiEnabled()) applyRomajiFromCache();
   }
 
   function applyFilters() {
@@ -574,6 +592,34 @@
     others.append(othersInput, othersCode, othersName); root.append(others);
   }
 
+  function renderCountries() {
+    const root = document.getElementById('crrcf-countries');
+    if (!root) return;
+    root.replaceChildren();
+    for (const [code, name] of [...TITLE_COUNTRIES, [OTHER_COUNTRY, 'Others']]) {
+      const selected = settings.romanizeCountries.includes(code);
+      const label = document.createElement('label');
+      label.className = 'crrcf-language-chip crrcf-country-chip' + (selected ? ' is-selected' : '');
+      label.title = code === OTHER_COUNTRY ? 'Shows made in any other country' : `Shows made in ${name}`;
+      const input = document.createElement('input'); input.type = 'checkbox'; input.checked = selected;
+      input.setAttribute('aria-label', label.title);
+      input.addEventListener('change', () => {
+        settings.romanizeCountries = input.checked
+          ? [...new Set([...settings.romanizeCountries, code])]
+          : settings.romanizeCountries.filter(x => x !== code);
+        label.classList.toggle('is-selected', input.checked);
+        updateTitleSummary(); saveSettings(); applyRomajiTitles();
+      });
+      const nameText = document.createElement('span'); nameText.className = 'crrcf-language-name'; nameText.textContent = name;
+      label.append(input, nameText); root.append(label);
+    }
+  }
+
+  function updateTitleSummary() {
+    const summary = document.getElementById('crrcf-title-summary');
+    if (summary) summary.textContent = `${settings.romanizeCountries.length}/${TITLE_COUNTRIES.length + 1} selected`;
+  }
+
   function setNativeTime(value) {
     const input = document.querySelector('input[name="release-calendar-time-format"]');
     if (input && Boolean(input.checked) !== Boolean(value)) input.click();
@@ -600,7 +646,7 @@
     romajiTitleStatus = 'Retrying AniList lookups for unmatched titles…';
     updateRomajiTitleStatus();
     scanAniListMetadata().then(() => {
-      if (settings.showRomajiTitles) applyRomajiFromCache();
+      if (romajiEnabled()) applyRomajiFromCache();
       queueApply();
     });
   }
@@ -644,7 +690,7 @@
       if (result?.catch) result.catch(() => {});
       document.getElementById('crrcf-memory-editor').hidden = true;
       document.querySelector('#crrcf-panel [aria-label="Edit Memory"]')?.classList.remove('is-active');
-      if (settings.showRomajiTitles) applyRomajiFromCache();
+      if (romajiEnabled()) applyRomajiFromCache();
       queueApply();
       if (status) status.textContent = `${metadataByTitle.size} entries saved.`;
       updateRomajiTitleStatus();
@@ -661,9 +707,9 @@
     if (result?.catch) result.catch(() => {});
     const status = document.getElementById('crrcf-memory-status');
     if (status) status.textContent = 'Memory reset.';
-    if (settings.showRomajiTitles) applyRomajiFromCache();
+    if (romajiEnabled()) applyRomajiFromCache();
     queueApply();
-    scanAniListMetadata().then(() => { if (settings.showRomajiTitles) applyRomajiFromCache(); queueApply(); });
+    scanAniListMetadata().then(() => { if (romajiEnabled()) applyRomajiFromCache(); queueApply(); });
   }
 
   function showRuntimeLogs() {
@@ -685,9 +731,15 @@
       <div class="crrcf-panel-head"><div><div class="crrcf-eyebrow">RELEASE CALENDAR</div><strong>Display Settings</strong></div><button type="button" id="crrcf-close" aria-label="Close settings">×</button></div>
       <details class="crrcf-language-details crrcf-accordion">
         <summary>Audio Options <span id="crrcf-language-summary"></span></summary>
-        <div class="crrcf-language-actions"><button type="button" id="crrcf-all">All</button><button type="button" id="crrcf-none">None</button></div>
+        <div class="crrcf-section-head"><p class="crrcf-section-hint">Show releases with these audio languages</p><div class="crrcf-language-actions"><button type="button" id="crrcf-all">All</button><button type="button" id="crrcf-none">None</button></div></div>
         <div id="crrcf-languages" class="crrcf-languages"></div>
         <div id="crrcf-original-audio-slot"></div>
+      </details>
+      <details class="crrcf-language-details crrcf-accordion crrcf-title-options">
+        <summary>Title Options <span id="crrcf-title-summary" class="crrcf-section-summary"></span></summary>
+        <div class="crrcf-section-head"><p class="crrcf-section-hint">Show original (romanized) titles of shows made in:</p><div class="crrcf-language-actions"><button type="button" id="crrcf-country-all">All</button><button type="button" id="crrcf-country-none">None</button></div></div>
+        <div id="crrcf-countries" class="crrcf-languages"></div>
+        <div id="crrcf-title-settings"></div>
       </details>
       <details class="crrcf-language-details crrcf-accordion crrcf-style-options">
         <summary>Style Options</summary>
@@ -700,8 +752,12 @@
     panel.querySelector('#crrcf-close').addEventListener('click', () => { panel.hidden = true; clearPanelTransientMessages(); });
     panel.querySelector('#crrcf-all').addEventListener('click', () => { settings.selectedLanguages = LANGUAGES.map(x => x[0]); settings.includeUnknownLanguages = true; renderLanguages(); saveSettings(); queueApply(); updateLanguageSummary(); });
     panel.querySelector('#crrcf-none').addEventListener('click', () => { settings.selectedLanguages = []; settings.includeUnknownLanguages = false; renderLanguages(); saveSettings(); queueApply(); updateLanguageSummary(); });
+    const setCountries = codes => { settings.romanizeCountries = codes; renderCountries(); updateTitleSummary(); saveSettings(); applyRomajiTitles(); };
+    panel.querySelector('#crrcf-country-all').addEventListener('click', () => setCountries([...TITLE_COUNTRIES.map(([code]) => code), OTHER_COUNTRY]));
+    panel.querySelector('#crrcf-country-none').addEventListener('click', () => setCountries([]));
     const list = panel.querySelector('.crrcf-settings-list');
     const styleList = panel.querySelector('#crrcf-style-settings');
+    const titleList = panel.querySelector('#crrcf-title-settings');
     function addSettingBlock(parent, row, statusId = null, statusText = '', extraClass = '') {
       const block = document.createElement('div');
       block.className = `crrcf-setting-block ${extraClass}`.trim();
@@ -717,13 +773,18 @@
     addSettingBlock(styleList, makeSwitch('crrcf-hidden-counters', 'Show hidden counters', settings.hiddenCounters, value => { settings.hiddenCounters = value; saveSettings(); queueApply(); }));
     addSettingBlock(styleList, makeSwitch('crrcf-align-cards', 'Align cards', settings.alignCards, value => { settings.alignCards = value; saveSettings(); queueApply(); }));
     addSettingBlock(styleList, makeSwitch('crrcf-hide-premiere', 'Hide PREMIERE labels', settings.hidePremiereBadges, value => { settings.hidePremiereBadges = value; saveSettings(); queueApply(); requestAnimationFrame(() => { if (settings.alignCards) applyAlignment(); }); }));
-    const romajiRow = makeSwitch('crrcf-romaji-titles', 'Romaji titles', settings.showRomajiTitles, value => { settings.showRomajiTitles = value; saveSettings(); applyRomajiTitles(); });
     const retryButton = document.createElement('button');
     retryButton.type = 'button'; retryButton.className = 'crrcf-icon-action crrcf-romaji-retry'; retryButton.innerHTML = '<span aria-hidden="true">↻</span>'; retryButton.setAttribute('aria-label', 'Retry unmatched AniList lookups');
     retryButton.title = 'Retry AniList lookups for titles without a saved match';
     retryButton.addEventListener('click', retryUnmatchedMetadata);
-    addSettingBlock(styleList, romajiRow, 'crrcf-romaji-title-status', romajiTitleStatus);
-    addSettingBlock(styleList, makeSwitch('crrcf-truncate-titles', 'Limit long titles', settings.truncateTitles, value => { settings.truncateTitles = value; document.documentElement.classList.toggle('crrcf-truncate-titles', value); saveSettings(); queueApply(); requestAnimationFrame(() => { if (settings.alignCards) applyAlignment(); }); }));
+    romajiTitleStatus = romajiEnabled() ? LOOKUP_NOTICE : NO_COUNTRY_MESSAGE;
+    const statusBlock = document.createElement('div');
+    statusBlock.className = 'crrcf-setting-block';
+    const statusText = document.createElement('p');
+    statusText.id = 'crrcf-romaji-title-status'; statusText.className = 'crrcf-setting-status'; statusText.textContent = romajiTitleStatus;
+    statusBlock.append(statusText);
+    titleList.append(statusBlock);
+    addSettingBlock(titleList, makeSwitch('crrcf-truncate-titles', 'Limit long titles', settings.truncateTitles, value => { settings.truncateTitles = value; document.documentElement.classList.toggle('crrcf-truncate-titles', value); saveSettings(); queueApply(); requestAnimationFrame(() => { if (settings.alignCards) applyAlignment(); }); }));
     const timeBlock = addSettingBlock(styleList, makeSwitch('crrcf-time24', '24-hour time', settings.time24h, value => { settings.time24h = value; setNativeTime(value); saveSettings(); }), null, '', 'crrcf-time-block');
     const timezoneNote = document.createElement('div'); timezoneNote.className = 'crrcf-timezone-note'; timeBlock.append(timezoneNote);
 
@@ -782,7 +843,7 @@
     memoryBlock.append(memoryActions, editor, memoryStatus);
     list.append(memoryBlock);
 
-    renderLanguages(); updateLanguageSummary(); updateRomajiTitleStatus();
+    renderLanguages(); updateLanguageSummary(); renderCountries(); updateTitleSummary(); updateRomajiTitleStatus();
     widthValue.textContent = WIDTH_LABELS[settings.calendarWidthLevel] || 'Original';
     return panel;
   }
@@ -1100,11 +1161,11 @@
         const key = titleKey(item.title);
         let record = findMetadataForTitle(item.title);
         // Only look titles up when the Romaji feature is on (nothing leaves the browser otherwise).
-        if (!record && settings.showRomajiTitles && !metadataAttempted.has(key)) {
+        if (!record && romajiEnabled() && !metadataAttempted.has(key)) {
           metadataAttempted.add(key);
           record = await lookupAniListMetadata(item.title);
         }
-        const desired = settings.showRomajiTitles && record?.romajiTitle ? record.romajiTitle : item.title;
+        const desired = romajiFor(record) || item.title;
         for (const node of item.nodes) {
           replaceTitleTextPreservingMarkup(node, item.title, desired);
           node.dataset.crrcfDisplayedRecommendationTitle = desired;
@@ -1124,7 +1185,7 @@
     const seriesTitle = getStructuredSeriesTitle();
     if (!seriesTitle) return;
     const record = findMetadataForTitle(seriesTitle);
-    const romaji = record?.romajiTitle;
+    const romaji = romajiFor(record);
     const nodes = findPageShowTitles(seriesTitle);
     if (!record || !romaji) {
       document.getElementById('crrcf-watch-reading-toggle-wrapper')?.remove();
@@ -1145,7 +1206,7 @@
 
     // The setting controls all series-page title instances. The watch-page
     // button is a local override and changes only the main show title.
-    let showRomaji = Boolean(settings.showRomajiTitles);
+    let showRomaji = true; // romajiFor() is only non-null when this show's country is selected
     const primaryNode = nodes.find(node => node.matches('h1,[role="heading"]')) || nodes[0];
     if (kind === 'watch' && primaryNode.dataset.crrcfManualReading) {
       showRomaji = primaryNode.dataset.crrcfManualReading === 'romaji';
@@ -1154,7 +1215,7 @@
     for (const node of nodes) {
       const nodeShowRomaji = kind === 'watch' && node === primaryNode
         ? showRomaji
-        : Boolean(settings.showRomajiTitles);
+        : true;
       const displayedTitle = nodeShowRomaji ? romaji : seriesTitle;
       replaceTitleTextPreservingMarkup(node, seriesTitle, displayedTitle);
       node.dataset.crrcfDisplayedTitle = displayedTitle;
@@ -1315,12 +1376,12 @@
     metadataAttempted.clear();
     setTimeout(() => {
       queueApply();
-      scanAniListMetadata().then(() => { if (settings.showRomajiTitles) applyRomajiFromCache(); queueApply(); });
-      if (settings.showRomajiTitles) applyRomajiFromCache();
+      scanAniListMetadata().then(() => { if (romajiEnabled()) applyRomajiFromCache(); queueApply(); });
+      if (romajiEnabled()) applyRomajiFromCache();
     }, 350);
     setTimeout(() => {
       queueApply();
-      if (settings.showRomajiTitles) applyRomajiFromCache();
+      if (romajiEnabled()) applyRomajiFromCache();
     }, 900);
   };
 
@@ -1342,8 +1403,8 @@
     applyCalendarSize();
     syncNativeTime();
     queueApply();
-    scanAniListMetadata().then(() => { if (settings.showRomajiTitles) applyRomajiFromCache(); queueApply(); });
-    if (settings.showRomajiTitles) applyRomajiFromCache();
+    scanAniListMetadata().then(() => { if (romajiEnabled()) applyRomajiFromCache(); queueApply(); });
+    if (romajiEnabled()) applyRomajiFromCache();
     calendarObserver = new MutationObserver(mutations => {
       if (document.querySelector('.erc-release-calendar')) applyCalendarSize();
       // Ignore our own settings panel, gear, and counter text to prevent observer loops.
@@ -1369,8 +1430,8 @@
         attachGear();
         if (!document.getElementById('crrcf-panel')?.hidden) requestAnimationFrame(() => positionPanel(document.getElementById('crrcf-panel'), document.getElementById('crrcf-gear')));
         queueApply();
-        scanAniListMetadata().then(() => { if (settings.showRomajiTitles) applyRomajiFromCache(); queueApply(); });
-        if (settings.showRomajiTitles) requestAnimationFrame(() => applyRomajiFromCache());
+        scanAniListMetadata().then(() => { if (romajiEnabled()) applyRomajiFromCache(); queueApply(); });
+        if (romajiEnabled()) requestAnimationFrame(() => applyRomajiFromCache());
       }
     });
     calendarObserver.observe(document.documentElement, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['href', 'data-t'] });
@@ -1434,6 +1495,13 @@
     next.calendarWidthLevel = Number.isFinite(level)
       ? Math.max(0, Math.min(WIDTH_LEVELS.length - 1, level))
       : DEFAULTS.calendarWidthLevel;
+    // v1 -> v2: the single "Romaji titles" switch became a list of countries.
+    if (saved && !Array.isArray(saved.romanizeCountries) && saved.showRomajiTitles === true) {
+      next.romanizeCountries = [...TITLE_COUNTRIES.map(([code]) => code), OTHER_COUNTRY];
+    }
+    if (!Array.isArray(next.romanizeCountries)) next.romanizeCountries = [];
+    const validCountries = [...TITLE_COUNTRIES.map(([code]) => code), OTHER_COUNTRY];
+    next.romanizeCountries = [...new Set(next.romanizeCountries.filter(code => validCountries.includes(code)))];
     next.schemaVersion = SCHEMA_VERSION;
     return next;
   }
@@ -1444,7 +1512,7 @@
       const saved = await loadSettings();
       await loadMetadataCache();
       settings = normalizeSettings(saved);
-      // Future migrations: branch on saved?.schemaVersion here, then store the new version.
+      // Add future migrations in normalizeSettings(), keyed on saved.schemaVersion.
       if (!saved || saved.schemaVersion !== SCHEMA_VERSION) saveSettings();
     })();
     return loadPromise;
